@@ -166,3 +166,43 @@ jobs:
       - name: Terraform Apply
         if: github.ref == 'refs/heads/"main"' && github.event_name == 'push'
         run: terraform apply -auto-approve -input=false
+
+############################
+
+  terraform_destroy:
+      # needs: terraform_destroy
+      name: 'Terraform Destroy'
+      env:
+        ARM_CLIENT_ID: ${{ secrets.AZ_APPLICATION_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.AZ_APPLICATION_KEY }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.AZ_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.AZ_TENANT_ID }}
+      runs-on: ubuntu-latest
+      environment: production
+
+      defaults:
+        run:
+          shell: bash
+
+      steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Replace tokens
+        uses: cschleiden/replace-tokens@v1.2
+        with:
+          tokenPrefix: '{{'
+          tokenSuffix: '}}' 
+          files: '["**/*.tf"]'
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Destroy
+        if: github.ref == 'refs/heads/"main"' && github.event_name == 'push'
+        run: terraform destroy -auto-approve -input=false
