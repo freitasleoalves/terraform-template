@@ -2,10 +2,10 @@
 
 terraform {
   backend "azurerm" {
-    storage_account_name = "{{ secrets.AZ_STG_NAME }}"
-    container_name       = "{{ secrets.AZ_CONTAINER_NAME }}"
-    key                  = "gihub_actions_test.tfstate"
     resource_group_name  = "rg-poc-terraform-eastus"
+    storage_account_name = "sapoctflogicalis"
+    container_name       = "terraform-tfstate"
+    key                  = "gihub_actions_test.tfstate"
   }
 }
 
