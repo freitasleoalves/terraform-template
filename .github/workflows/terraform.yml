@@ -87,7 +87,9 @@ jobs:
       run: terraform init
 
     - name: Terraform Plan
-      run: terraform plan -input=false
+      run: |
+        checkov .
+        terraform plan -input=false
 
 ############################
 
