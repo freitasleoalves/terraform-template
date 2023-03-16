@@ -1,0 +1,208 @@
+# This workflow installs the latest version of Terraform CLI and configures the Terraform CLI configuration file
+# with an API token for Terraform Cloud (app.terraform.io). On pull request events, this workflow will run
+# `terraform init`, `terraform fmt`, and `terraform plan` (speculative plan via Terraform Cloud). On push events
+# to the "main" branch, `terraform apply` will be executed.
+#
+# Documentation for `hashicorp/setup-terraform` is located here: https://github.com/hashicorp/setup-terraform
+#
+# To use this workflow, you will need to complete the following setup steps.
+#
+# 1. Create a `main.tf` file in the root of this repository with the `remote` backend and one or more resources defined.
+#   Example `main.tf`:
+#     # The configuration for the `remote` backend.
+#     terraform {
+#       backend "remote" {
+#         # The name of your Terraform Cloud organization.
+#         organization = "example-organization"
+#
+#         # The name of the Terraform Cloud workspace to store Terraform state files in.
+#         workspaces {
+#           name = "example-workspace"
+#         }
+#       }
+#     }
+#
+#     # An example resource that does nothing.
+#     resource "null_resource" "example" {
+#       triggers = {
+#         value = "A example resource that does nothing!"
+#       }
+#     }
+#
+#
+# 2. Generate a Terraform Cloud user API token and store it as a GitHub secret (e.g. TF_API_TOKEN) on this repository.
+#   Documentation:
+#     - https://www.terraform.io/docs/cloud/users-teams-organizations/api-tokens.html
+#     - https://help.github.com/en/actions/configuring-and-managing-workflows/creating-and-storing-encrypted-secrets
+#
+# 3. Reference the GitHub secret in step using the `hashicorp/setup-terraform` GitHub Action.
+#   Example:
+#     - name: Setup Terraform
+#       uses: hashicorp/setup-terraform@v1
+#       with:
+#         cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+name: 'Terraform'
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  terraform_plan:
+    name: 'Terraform Plan'
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZ_APPLICATION_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.AZ_APPLICATION_KEY }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZ_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZ_TENANT_ID }}
+    runs-on: ubuntu-latest
+    environment: production
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
+      with:
+        cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+    - name: Replace tokens
+      uses: cschleiden/replace-tokens@v1.2
+      with:
+        tokenPrefix: '{{'
+        tokenSuffix: '}}'
+        files: '["**/*.tf"]'
+          
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Checkov GitHub Action
+      uses: bridgecrewio/checkov-action@v12.1347.0
+      with:
+        # directory with infrastructure code to scan
+        directory: . # optional, default is .
+        # Run scan only on a specific check identifier (comma separated)
+        # check: # optional
+        # # Run scan on all checks but a specific check identifier (comma separated)
+        # skip_check: # optional
+        # # display only failed checks
+        # quiet: # optional
+        # # Environment variable name of the Bridgecrew API key from Bridgecrew app
+        # api-key: # optional
+        # # do not return an error code if there are failed checks
+        # soft_fail: # optional
+        # # run only on a specific infrastructure
+        # framework: # optional
+        # # comma separated list of external (custom) checks directories
+        # external_checks_dirs: # optional
+        # # comma separated list of external (custom) checks repositories
+        # external_checks_repos: # optional
+        # # The format of the output. cli, json, junitxml, github_failed_only, or sarif
+        # output_format: # optional, default is sarif
+        # # download external terraform modules from public git repositories and terraform registry:true, false
+        # download_external_modules: # optional
+        # # log level
+        # log_level: # optional, default is WARNING
+        # # checkov configuration file
+        # config_file: # optional
+        # # Path to a .checkov.baseline file to compare. Report will include only failed checks that are not in the baseline
+        # baseline: # optional
+        # # Do not return an error code only for specific check identifiers (comma separated)
+        # soft_fail_on: # optional
+        # # Return an error code only for specific check identifiers (comma separated)
+        # hard_fail_on: # optional
+        # # Set the username or UID used and optionally the groupname or GID for the action to run under
+        # container_user: # optional, default is 0
+
+    - name: Terraform Plan
+      run: terraform plan -input=false
+
+############################
+
+  terraform_apply:
+      needs: terraform_plan
+      name: 'Terraform Apply'
+      env:
+        ARM_CLIENT_ID: ${{ secrets.AZ_APPLICATION_ID }}
+        ARM_CLIENT_SECRET: ${{ secrets.AZ_APPLICATION_KEY }}
+        ARM_SUBSCRIPTION_ID: ${{ secrets.AZ_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ secrets.AZ_TENANT_ID }}
+      runs-on: ubuntu-latest
+      environment: production
+
+      defaults:
+        run:
+          shell: bash
+
+      steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Replace tokens
+        uses: cschleiden/replace-tokens@v1.2
+        with:
+          tokenPrefix: '{{'
+          tokenSuffix: '}}' 
+          files: '["**/*.tf"]'
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/"main"' && github.event_name == 'push'
+        run: terraform apply -auto-approve -input=false
+
+############################
+
+  # terraform_destroy:
+  #     # needs: terraform_destroy
+  #     name: 'Terraform Destroy'
+  #     env:
+  #       ARM_CLIENT_ID: ${{ secrets.AZ_APPLICATION_ID }}
+  #       ARM_CLIENT_SECRET: ${{ secrets.AZ_APPLICATION_KEY }}
+  #       ARM_SUBSCRIPTION_ID: ${{ secrets.AZ_SUBSCRIPTION_ID }}
+  #       ARM_TENANT_ID: ${{ secrets.AZ_TENANT_ID }}
+  #     runs-on: ubuntu-latest
+  #     environment: production
+
+  #     defaults:
+  #       run:
+  #         shell: bash
+
+  #     steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v3
+
+  #     - name: Setup Terraform
+  #       uses: hashicorp/setup-terraform@v1
+  #       with:
+  #         cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+  #     - name: Replace tokens
+  #       uses: cschleiden/replace-tokens@v1.2
+  #       with:
+  #         tokenPrefix: '{{'
+  #         tokenSuffix: '}}' 
+  #         files: '["**/*.tf"]'
+
+  #     - name: Terraform Init
+  #       run: terraform init
+
+  #     - name: Terraform Destroy
+  #       if: github.ref == 'refs/heads/"main"' && github.event_name == 'push'
+  #       run: terraform destroy -auto-approve -input=false
